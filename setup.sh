@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Bootstrap script - sets up Git SSH auth, then clones dotfiles with private submodule
-# Usage: curl -fsSL https://raw.githubusercontent.com/dimitrius-ion/bootstrap/main/setup.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/dimitrius-ion/dotfiles/main/setup.sh | bash
 
 set -e
 
-BOOTSTRAP_REPO="https://github.com/dimitrius-ion/bootstrap.git"
+BOOTSTRAP_REPO="https://github.com/dimitrius-ion/dotfiles.git"
 PRIVATE_REPO="git@github.com:dimitrius-ion/env.git"
 DOTFILES_DIR="$HOME/.dotfiles"
 
@@ -59,54 +59,57 @@ success "Git identity: $(git config --global user.name) <$(git config --global u
 # 3. Setup SSH key for GitHub
 # =============================================================================
 echo ""
-SSH_KEY="$HOME/.ssh/id_ed25519"
-
-if [ ! -f "$SSH_KEY" ]; then
-    info "Generating SSH key..."
-    mkdir -p "$HOME/.ssh"
-    chmod 700 "$HOME/.ssh"
-    ssh-keygen -t ed25519 -C "$(git config --global user.email)" -f "$SSH_KEY" -N ""
-    success "SSH key generated"
-fi
-
-# Start ssh-agent and add key
-eval "$(ssh-agent -s)" > /dev/null 2>&1
-ssh-add "$SSH_KEY" 2>/dev/null || true
-
-echo ""
-echo "════════════════════════════════════════════════════════════════"
-echo "Add this SSH key to GitHub → Settings → SSH Keys:"
-echo "https://github.com/settings/keys"
-echo "════════════════════════════════════════════════════════════════"
-echo ""
-cat "$SSH_KEY.pub"
-echo ""
-echo "════════════════════════════════════════════════════════════════"
-
-# Copy to clipboard if possible
-if command -v pbcopy &> /dev/null; then
-    cat "$SSH_KEY.pub" | pbcopy
-    info "SSH key copied to clipboard (macOS)"
-elif command -v xclip &> /dev/null; then
-    cat "$SSH_KEY.pub" | xclip -selection clipboard
-    info "SSH key copied to clipboard (Linux)"
-elif command -v wl-copy &> /dev/null; then
-    cat "$SSH_KEY.pub" | wl-copy
-    info "SSH key copied to clipboard (Wayland)"
-fi
-
-echo ""
-read -p "Press Enter after adding the key to GitHub..."
-
-# =============================================================================
-# 4. Test GitHub SSH connection
-# =============================================================================
-echo ""
 info "Testing GitHub SSH connection..."
 if ssh -T git@github.com 2>&1 | grep -q "successfully authenticated"; then
     success "GitHub SSH authentication working"
 else
-    warn "SSH test returned unexpected response (this may be OK)"
+    warn "GitHub SSH authentication failed"
+    SSH_KEY="$HOME/.ssh/id_ed25519"
+
+    if [ ! -f "$SSH_KEY" ]; then
+        info "Generating SSH key..."
+        mkdir -p "$HOME/.ssh"
+        chmod 700 "$HOME/.ssh"
+        ssh-keygen -t ed25519 -C "$(git config --global user.email)" -f "$SSH_KEY" -N ""
+        success "SSH key generated"
+    fi
+
+    # Start ssh-agent and add key
+    eval "$(ssh-agent -s)" > /dev/null 2>&1
+    ssh-add "$SSH_KEY" 2>/dev/null || true
+
+    echo ""
+    echo "════════════════════════════════════════════════════════════════"
+    echo "Add this SSH key to GitHub → Settings → SSH Keys:"
+    echo "https://github.com/settings/keys"
+    echo "════════════════════════════════════════════════════════════════"
+    echo ""
+    cat "$SSH_KEY.pub"
+    echo ""
+    echo "════════════════════════════════════════════════════════════════"
+
+    # Copy to clipboard if possible
+    if command -v pbcopy &> /dev/null; then
+        cat "$SSH_KEY.pub" | pbcopy
+        info "SSH key copied to clipboard (macOS)"
+    elif command -v xclip &> /dev/null; then
+        cat "$SSH_KEY.pub" | xclip -selection clipboard
+        info "SSH key copied to clipboard (Linux)"
+    elif command -v wl-copy &> /dev/null; then
+        cat "$SSH_KEY.pub" | wl-copy
+        info "SSH key copied to clipboard (Wayland)"
+    fi
+
+    echo ""
+    read -p "Press Enter after adding the key to GitHub..."
+
+    # Verify SSH after setup
+    info "Testing GitHub SSH connection..."
+    if ssh -T git@github.com 2>&1 | grep -q "successfully authenticated"; then
+        success "GitHub SSH authentication working"
+    else
+        warn "SSH test returned unexpected response (this may be OK)"
+    fi
 fi
 
 # =============================================================================
