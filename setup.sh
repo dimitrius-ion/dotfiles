@@ -4,7 +4,7 @@
 
 set -e
 
-BOOTSTRAP_REPO="https://github.com/dimitrius-ion/dotfiles.git"
+BOOTSTRAP_REPO="git@github.com:dimitrius-ion/dotfiles.git"
 PRIVATE_REPO="git@github.com:dimitrius-ion/env.git"
 DOTFILES_DIR="$HOME/.dotfiles"
 
@@ -113,31 +113,26 @@ else
 fi
 
 # =============================================================================
-# 5. Clone bootstrap repo with private submodule
+# 5. Clone bootstrap repo with private submodule (SSH is verified above)
 # =============================================================================
 echo ""
 if [ -d "$DOTFILES_DIR" ]; then
-    warn "Dotfiles directory already exists: $DOTFILES_DIR"
-    read -p "Remove and re-clone? [y/N] " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        rm -rf "$DOTFILES_DIR"
-    else
-        info "Skipping clone"
-        exit 0
-    fi
+    info "Dotfiles directory already exists, updating..."
+    cd "$DOTFILES_DIR"
+    git pull --ff-only || true
+    info "Updating submodules..."
+    git submodule update --init --recursive
+    success "Dotfiles updated"
+else
+    info "Cloning dotfiles (via SSH)..."
+    mkdir -p "$(dirname "$DOTFILES_DIR")"
+    git clone "$BOOTSTRAP_REPO" "$DOTFILES_DIR"
+    success "Bootstrap repo cloned"
+    cd "$DOTFILES_DIR"
+    info "Initializing private dotfiles submodule..."
+    git submodule update --init --recursive
+    success "Private dotfiles loaded"
 fi
-
-info "Cloning dotfiles..."
-mkdir -p "$(dirname "$DOTFILES_DIR")"
-git clone "$BOOTSTRAP_REPO" "$DOTFILES_DIR"
-success "Bootstrap repo cloned"
-
-# Initialize private submodule
-info "Initializing private dotfiles submodule..."
-cd "$DOTFILES_DIR"
-git submodule update --init --recursive
-success "Private dotfiles loaded"
 
 # =============================================================================
 # 6. Run dotfiles installer
