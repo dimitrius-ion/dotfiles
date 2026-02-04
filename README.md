@@ -5,16 +5,16 @@ Public bootstrap script that sets up Git SSH authentication and clones private d
 ## Quick Start
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/dimitrius-ion/bootstrap/main/setup.sh | bash
+curl -fsSL https://raw.githubusercontent.com/dimitrius-ion/dotfiles/main/setup.sh | bash
 ```
 
 ## What It Does
 
 1. **Installs Git** (if missing) via Xcode CLI / apt / dnf / pacman
 2. **Configures Git** identity (name, email)
-3. **Generates SSH key** (ed25519) and copies to clipboard
-4. **Waits** for you to add key to [GitHub SSH settings](https://github.com/settings/keys)
-5. **Tests SSH** connection to GitHub
+3. **Tests SSH** — skips to step 6 if already authenticated
+4. **Generates SSH key** (ed25519) and copies to clipboard
+5. **Waits** for you to add key to [GitHub SSH settings](https://github.com/settings/keys)
 6. **Clones this repo** with private `env/` submodule
 7. **Runs installer** (`env/install.sh`)
 
@@ -31,7 +31,7 @@ curl -fsSL https://raw.githubusercontent.com/dimitrius-ion/bootstrap/main/setup.
 
 ```bash
 # Clone bootstrap (public)
-git clone https://github.com/dimitrius-ion/bootstrap.git ~/.dotfiles
+git clone https://github.com/dimitrius-ion/dotfiles.git ~/.dotfiles
 cd ~/.dotfiles
 
 # Initialize private submodule (requires SSH key added to GitHub)
