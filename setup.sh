@@ -3,6 +3,7 @@
 # Usage: curl -fsSL https://raw.githubusercontent.com/dimitrius-ion/dotfiles/main/setup.sh | bash
 
 set -e
+set -o pipefail
 
 BOOTSTRAP_REPO="git@github.com:dimitrius-ion/dotfiles.git"
 PRIVATE_REPO="git@github.com:dimitrius-ion/env.git"
