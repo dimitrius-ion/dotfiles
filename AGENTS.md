@@ -9,7 +9,7 @@ Cross-platform (macOS/Linux) dotfiles containing configurations for:
 - **Neovim** - Lua configuration with plugins and LSP
 - **Git** - Global Git configuration
 - **Ghostty** - Terminal emulator settings
-- **Vivaldi** - Browser settings
+
 
 ## Build / Setup Commands
 
