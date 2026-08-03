@@ -21,18 +21,25 @@ curl -fsSL https://raw.githubusercontent.com/dimitrius-ion/dotfiles/main/setup.s
 ## Structure
 
 ```
-~/.dotfiles/
+~/Personal/dotfiles/
 ├── setup.sh          # Bootstrap script (public)
 ├── README.md
 └── env/              # Private dotfiles (submodule)
 ```
 
+## Location
+
+`~/Personal/dotfiles` is only the default. Clone anywhere, or set
+`DOTFILES_DIR=/path` before running `setup.sh`; an existing checkout is found via
+`~/.local/share/dotfiles`, so re-running never clones a second copy. To relocate
+an install, `mv` it and re-run `./env/install.sh`.
+
 ## Manual Setup
 
 ```bash
-# Clone bootstrap (public)
-git clone https://github.com/dimitrius-ion/dotfiles.git ~/.dotfiles
-cd ~/.dotfiles
+# Clone bootstrap (public) — path is up to you
+git clone https://github.com/dimitrius-ion/dotfiles.git ~/Personal/dotfiles
+cd ~/Personal/dotfiles
 
 # Initialize private submodule (requires SSH key added to GitHub)
 git submodule update --init --recursive
@@ -44,7 +51,7 @@ git submodule update --init --recursive
 ## Updating
 
 ```bash
-cd ~/.dotfiles
+cd ~/Personal/dotfiles
 
 # Update everything
 git pull

@@ -7,7 +7,13 @@ set -o pipefail
 
 BOOTSTRAP_REPO="git@github.com:dimitrius-ion/dotfiles.git"
 PRIVATE_REPO="git@github.com:dimitrius-ion/env.git"
-DOTFILES_DIR="$HOME/.dotfiles"
+# Clone location. Override with DOTFILES_DIR=... ; an existing checkout found
+# via ~/.local/share/dotfiles wins, so re-running never clones a second copy.
+DEFAULT_DOTFILES_DIR="$HOME/Personal/dotfiles"
+if [ -z "${DOTFILES_DIR:-}" ] && [ -d "$HOME/.local/share/dotfiles/.git" ]; then
+    DOTFILES_DIR="$(cd "$HOME/.local/share/dotfiles" && pwd -P)"
+fi
+DOTFILES_DIR="${DOTFILES_DIR:-$DEFAULT_DOTFILES_DIR}"
 
 info() { printf "\033[0;34m[INFO]\033[0m %s\n" "$1"; }
 success() { printf "\033[0;32m[OK]\033[0m %s\n" "$1"; }
