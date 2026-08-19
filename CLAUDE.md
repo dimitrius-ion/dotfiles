@@ -77,6 +77,8 @@ Omarchy's own defaults also load *before* our config, and what they cover shifts
 hyprctl binds -j | jq 'map(select(.key != "")) | group_by([.modmask,.key]) | map(select(length > 1))'
 ```
 
+**Danger: `omarchy-refresh-hyprland` / `omarchy-refresh-config hypr/*.lua` destroys these files.** Unlike `hyprland.conf`/`hyprland.lua` (deliberately left to Omarchy, restored via `restore_omarchy_config`), `config/hypr/{autostart,bindings,input,looknfeel,monitors}.lua` are symlinked directly into `~/.config/hypr/`. `omarchy-refresh-config` (the machinery behind the "Refresh Hyprland" menu entry) does `cp -f "$default" "$user_config_file"` — since the destination is a symlink, this writes straight through it into the repo file, silently replacing our customizations with Omarchy's stock template. It does leave a timestamped `~/.config/hypr/<file>.lua.bak.<epoch>` backup, and the repo's git history is a second line of defense, but **never run `omarchy-refresh-hyprland`** (or `omarchy-refresh-config` on any `hypr/*.lua` path) on this machine. If it happens anyway: `git -C env checkout -- config/hypr/*.lua && hyprctl reload`.
+
 ## `env/` layout
 
 - `config/<app>/` — user app configs symlinked into `~/.config` or `~/` (fish, git, nvim, hypr, ghostty, gtk, omarchy, claude, claude-personal).
