@@ -120,7 +120,7 @@ else
 fi
 
 # =============================================================================
-# 5. Clone bootstrap repo with private submodule (SSH is verified above)
+# 4. Clone bootstrap repo with private submodule (SSH is verified above)
 # =============================================================================
 echo ""
 if [ -d "$DOTFILES_DIR" ]; then
@@ -142,7 +142,7 @@ else
 fi
 
 # =============================================================================
-# 6. Run dotfiles installer
+# 5. Run dotfiles installer
 # =============================================================================
 echo ""
 read -p "Run dotfiles installer now? [Y/n] " -n 1 -r
