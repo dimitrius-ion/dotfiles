@@ -11,7 +11,7 @@ This is a **two-repo dotfiles system** for Arch Linux + Omarchy:
 
 Because `env/` is a submodule, changes there are committed in `env/` first, then the pointer is bumped in `~/Personal/dotfiles` (the recent commit log here is almost entirely `chore(env): Bump submodule ...`).
 
-`env/` itself nests further submodules (see `env/.gitmodules`): `external/pi`, `external/agentmemory`, and a ZMK keyboard firmware repo.
+`env/` itself nests further submodules (see `env/.gitmodules`): `external/pi` and a ZMK keyboard firmware repo.
 
 ## Common commands
 
@@ -46,11 +46,12 @@ Moving the checkout is therefore `mv` + `./env/install.sh`. The installer repoin
 
 The installer is a **module runner**, not a monolithic script:
 
-1. **Discovery** — scans `env/modules/*/`, each providing `module.sh` (logic) and `module.conf` (metadata: `name`, `priority`, `enabled_by_default`, `depends`).
+1. **Discovery** — scans `env/modules/*/`, each providing `module.sh` (logic) and `module.conf` (metadata: `name`, `priority`, `enabled_by_default`, `depends`, `remember`).
 2. **Ordering** — modules run in `priority` order (ascending), but `depends=` forces a topological sort via `visit_module`. Cyclic or unknown dependencies abort the install.
-3. **Execution** — each `module.sh` is **sourced** (not executed) into the installer's shell, so it inherits helpers and shared arrays. Default-disabled modules (`enabled_by_default=false`, e.g. `pi`, `agentmemory`, `debloat`) run only with `-a` or an explicit `-m`.
+3. **Execution** — each `module.sh` is **sourced** (not executed) into the installer's shell, so it inherits helpers and shared arrays. Default-disabled modules (`enabled_by_default=false`: `pi`, `graphiti`, `debloat`) run only with `-a` or an explicit `-m`.
+4. **Memory** — a default-disabled module that has actually run is recorded in `~/.local/state/dotfiles/installed-modules`, so later full installs restore it instead of leaving its symlinks orphaned. `remember=false` in `module.conf` opts out of that (only `debloat` does, since it is a one-shot package removal that must never re-run implicitly). Edit that state file to make the installer forget a module.
 
-Current priority order: `fish`(10) → `claude`/`dependencies`(20) → `proton`(30) → `symlinks`(40) → `system`(50) → ... → `debloat`(200).
+Current priority order: `fish`(10) → `claude`/`dependencies`(20) → `proton`(30) → `omarchy-plugins`(35) → `symlinks`(40) → `system`(50) → ... → `pi`(130)/`sublime-merge`(130) → `graphiti`(140) → `debloat`(200). Run `./install.sh -l` for the live list rather than trusting this one.
 
 ### Shared helpers (`env/lib/common.sh`)
 
@@ -68,7 +69,7 @@ Every `module.sh` starts with a `# Sourced by install.sh — do not execute dire
 Omarchy owns many config files (`hypr/`, `omarchy/`, `ghostty/`, GTK theme CSS) and **rewrites them on updates/theme changes**. The dotfiles therefore **extend rather than replace**:
 
 - Symlink individual files (not whole directories) into `~/.config/hypr/` so Omarchy keeps owning the directory.
-- For files Omarchy regenerates, keep our changes in a separate override file and **idempotently append an include** to Omarchy's file — `config-file = ...overrides` (ghostty) or `@import "geary-overrides.css"` (GTK) — or, where the format has no include mechanism, `jq -s '.[0] * .[1]'` merge (the quickshell bar's `omarchy/shell.json`).
+- For files Omarchy regenerates, keep our changes in a separate override file and **idempotently append an include** to Omarchy's file — `config-file = ...overrides` (ghostty) or `@import "geary-overrides.css"` (GTK) — or, where the format has no include mechanism, a `jq` merge (the quickshell bar's `omarchy/shell.json`; see the plugins section below for its precedence rules).
 - See `env/modules/symlinks/module.sh` for all of these; it's the reference for the extend-don't-replace approach.
 
 Omarchy's own defaults also load *before* our config, and what they cover shifts between releases — 4.0 moved app/web-app keybindings into `default/hypr/bindings/applications.lua`, so re-declaring one leaves two binds firing on the same combo. After an Omarchy upgrade, check with:
@@ -78,6 +79,38 @@ hyprctl binds -j | jq 'map(select(.key != "")) | group_by([.modmask,.key]) | map
 ```
 
 **Danger: `omarchy-refresh-hyprland` / `omarchy-refresh-config hypr/*.lua` destroys these files.** Unlike `hyprland.conf`/`hyprland.lua` (deliberately left to Omarchy, restored via `restore_omarchy_config`), `config/hypr/{autostart,bindings,input,looknfeel,monitors}.lua` are symlinked directly into `~/.config/hypr/`. `omarchy-refresh-config` (the machinery behind the "Refresh Hyprland" menu entry) does `cp -f "$default" "$user_config_file"` — since the destination is a symlink, this writes straight through it into the repo file, silently replacing our customizations with Omarchy's stock template. It does leave a timestamped `~/.config/hypr/<file>.lua.bak.<epoch>` backup, and the repo's git history is a second line of defense, but **never run `omarchy-refresh-hyprland`** (or `omarchy-refresh-config` on any `hypr/*.lua` path) on this machine. If it happens anyway: `git -C env checkout -- config/hypr/*.lua && hyprctl reload`.
+
+## Omarchy shell plugins (quickshell bar)
+
+`env/modules/omarchy-plugins/` (priority 35, just ahead of `symlinks`) owns everything under `~/.config/omarchy/plugins/`. Two kinds:
+
+- **Ours** — hand-written QML in `env/config/omarchy/plugins/<id>/`, symlinked into place (currently `dimitrius.iwd-network`).
+- **Third-party** — declared as `<id>|<git url>` pairs in the `OMARCHY_GIT_PLUGINS` array and installed with `omarchy plugin add`, which owns the checkout and can `omarchy plugin update` it later (currently `lgse.sandman`, `io.github.sirjul1337.lock-explorer`, `omaplug`). **Don't vendor these as submodules** — that fights the plugin CLI's own registry for no gain while we aren't patching them. Fork and swap the URL if that changes.
+
+`omaplug` is a plugin manager widget that can enable, disable, install and remove plugins from the bar — but `plugins` and `disabledPlugins` are declared in `shell-override.json`, so **the next `symlinks` run reverts any toggle made there**. Use it to browse, try and update, then mirror anything worth keeping into `OMARCHY_GIT_PLUGINS` and the override.
+
+A plugin needing a root-owned helper installs it from the module via `sudo_install_exec`, never from the plugin directory itself (Sandman's `sandman-configure-hibernate` → `/usr/local/libexec/`).
+
+### `shell.json` merge precedence
+
+`modules/symlinks/module.sh` rebuilds `~/.config/omarchy/shell.json` as **stock × carried × override**, last wins:
+
+1. **stock** — `~/.local/share/omarchy/config/omarchy/shell.json`.
+2. **carried** — only the keys in the module's `carry_keys` (`idle`, `cloneSourceRestores`) survive from the live file. `idle` is Sandman's screensaver/lock timeouts; re-asserting stock would silently undo the bar UI on every install. `cloneSourceRestores` is the plugin CLI's bookkeeping for restoring a built-in when a cloned plugin is removed.
+3. **override** — `env/config/omarchy/shell-override.json`, which declares the bar layout, `plugins` and `disabledPlugins`.
+
+Everything else in the live file is **destroyed** on every run. That is deliberate for bar layout (it reverts drag-to-reorder gestures back to what the repo declares), but it means anything new the plugin CLI starts writing to `shell.json` must be added to the override or to `carry_keys` — otherwise it silently disappears on the next install. jq's `*` replaces arrays wholesale, so `bar.layout` sections and `plugins` are listed in full rather than as deltas, and `shell.qml` discards the file unless `version` is 1.
+
+## Power and idle management
+
+Split deliberately between the Sandman plugin and `env/system/`:
+
+- **Sandman owns** lid-close action, screensaver, displays-off (DPMS), auto-lock, sleep, and hibernate-after-sleep. It takes a low-level lid-switch inhibitor instead of editing logind, writes the hibernate delay to `/etc/systemd/sleep.conf.d/90-sandman.conf`, and inserts a managed `-- BEGIN Sandman lid action override` block into `~/.config/hypr/bindings.lua` — **which is a symlink into the repo**, so that block lands in `env/config/hypr/bindings.lua` and shows up in `git diff`.
+- **The repo still owns** `99-power-profile.rules` (AC/battery power profile + wifi powersave), `99-low-battery.rules` (hibernate at 5%), `usb-wakeup.sh`, and `battery-notify.sh`. Sandman touches none of these.
+
+Don't reintroduce a `sleep.conf.d/hyprland.conf` or `logind.conf.d/hyprland.conf` drop-in: systemd applies drop-ins in lexicographic order and the last wins, so `hyprland.conf` sorts after `90-sandman.conf` and would silently override whatever the Sandman UI reports. `modules/system/module.sh` sweeps both paths on every run.
+
+Also note Sandman persists an **Off** timeout as a 7-day value in `shell.json`. Removing the plugin while auto-lock is Off leaves a machine that effectively never locks, with no UI left to notice.
 
 ## `env/` layout
 
