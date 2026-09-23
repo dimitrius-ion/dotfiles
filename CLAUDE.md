@@ -91,7 +91,27 @@ hyprctl binds -j | jq 'map(select(.key != "")) | group_by([.modmask,.key]) | map
 
 Window-close undo used to be a hand-rolled stash (`window-stash.sh`, soft-close into a `special:stash` workspace). It was retired for `io.github.chris.desktop-undo`, which also covers drags, float toggles, fullscreen and workspace sends. `SUPER+W` and `SUPER+SHIFT+W` are back under Omarchy's defaults. The tradeoff was accepted deliberately: the stash never killed the process so state survived, whereas plugin close-undo relaunches the command.
 
-Two plugins offer to write their own block into `~/.config/hypr/bindings.lua` — Sandman's lid action, and Desktop Undo's "Set hotkey". That path is a symlink into the repo, so such a block lands in `env/config/hypr/bindings.lua`. Sandman's is unavoidable (it is how the managed lid action works). Desktop Undo's is not: its three binds are declared in `bindings.lua` directly, so **don't use its "Set hotkey" button**.
+### Terminals survive Super+Z
+
+`SUPER+RETURN` runs `config/hypr/scripts/terminal-tmux.sh`, not Omarchy's terminal bind. Each window gets its own tmux session whose name is baked into the terminal's argv (`ghostty … -e tmux new -A -s w<hex>`). Closing the window leaves that session on the tmux server with its scrollback and running processes intact, and desktop-undo replays the window's `/proc/<pid>/cmdline` verbatim (`Service.qml:357` → `js/Ops.js:250`), so Super+Z re-runs the identical command and `-A` reattaches that exact session instead of opening a fresh shell.
+
+This is the answer to the one thing relaunch-based undo cannot do. Without it, Super+Z on a terminal returns the cwd and fish's global history but loses the scrollback and anything that was running.
+
+Three things it depends on, none obvious:
+
+- **The session name must be unique per window and present in argv at launch.** Omarchy's own `SUPER+ALT+RETURN` tmux bind attaches a single shared `Work` session — deliberately left alone, it is a different tool.
+- **`-A` on `tmux new`**, which attaches rather than failing when the session exists. That one flag is what turns a replayed argv into a reattach.
+- **`ghostty -e` spawns its own process** even though Omarchy launches ghostty from a `.desktop` file with `--gtk-single-instance=true`. Windows opened *without* a command all share one process (and therefore one argv, and one `/proc` entry with every window's shells as children), so there is nothing per-window to replay. Don't "simplify" the launcher by dropping the command.
+
+Sessions outlive their windows by design. `terminal-tmux-reap.sh` (daily, via `systemd/tmux-reap.timer`) clears detached sessions idle over 24h, matching only the `w<8 hex>` names this repo generates so hand-made sessions are never touched. They do not survive a reboot regardless — the tmux server is an ordinary user process.
+
+Several plugins write managed blocks into `config/hypr/*.lua`, and those paths are symlinks into the repo — so the block lands in `env/config/hypr/` and shows up in `git diff` as an uncommitted change nobody made by hand:
+
+- **Sandman** — a lid-action block in `bindings.lua`. Unavoidable; it is how the managed lid action works.
+- **Omaland** — a `-- >>> omaland managed block >>>` in `looknfeel.lua`, written automatically whenever its panel opens, with no opt-in.
+- **Desktop Undo** — offers one in `bindings.lua` via its "Set hotkey" button. Avoidable, and avoided: its three binds are declared in `bindings.lua` directly, so **don't use that button**.
+
+When `git status` in `env/` shows an unexplained `hypr/*.lua` change, check for a fenced managed block before assuming it was you.
 
 A plugin needing a root-owned helper installs it from the module via `sudo_install_exec`, never from the plugin directory itself (Sandman's `sandman-configure-hibernate` → `/usr/local/libexec/`).
 
