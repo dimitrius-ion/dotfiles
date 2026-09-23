@@ -89,7 +89,22 @@ hyprctl binds -j | jq 'map(select(.key != "")) | group_by([.modmask,.key]) | map
 
 `omaplug` is a plugin manager widget that can enable, disable, install and remove plugins from the bar — but `plugins` and `disabledPlugins` are declared in `shell-override.json`, so **the next `symlinks` run reverts any toggle made there**. Use it to browse, try and update, then mirror anything worth keeping into `OMARCHY_GIT_PLUGINS` and the override.
 
+Middle-click (`mouse:274`) closes the window under the cursor, bound **without a modifier**, so it grabs middle click globally — middle-click paste in terminals and middle-click-open-link in browsers do not reach the application. That cost is accepted deliberately; it also means tmux never sees a middle click, so there is no point binding one in `overrides.conf`.
+
 Window-close undo used to be a hand-rolled stash (`window-stash.sh`, soft-close into a `special:stash` workspace). It was retired for `io.github.chris.desktop-undo`, which also covers drags, float toggles, fullscreen and workspace sends. `SUPER+W` and `SUPER+SHIFT+W` are back under Omarchy's defaults. The tradeoff was accepted deliberately: the stash never killed the process so state survived, whereas plugin close-undo relaunches the command.
+
+### tmux config
+
+Omarchy owns `~/.config/tmux/tmux.conf` and `omarchy-refresh-tmux` overwrites it via the same `omarchy-refresh-config` `cp -f` that would write through a symlink into this repo. So tmux.conf stays Omarchy's, our bindings live in `env/config/tmux/overrides.conf`, and the `symlinks` module idempotently appends `source-file ~/.config/tmux/overrides.conf` to the end of Omarchy's file — the ghostty/GTK extend pattern again.
+
+The overrides add vim-style keys *alongside* Omarchy's arrows, never replacing them: `Ctrl+Alt+hjkl` focus, `Ctrl+Alt+Shift+hjkl` resize, `Alt+h`/`Alt+l` window nav, `prefix s`/`S` for `:sp`/`:vs` splits, `prefix n`/`p` for windows.
+
+Two collisions handled, worth not re-introducing:
+
+- **Resize is not on `prefix H/J/K/L`** — Omarchy binds `prefix K` to kill-session, and taking it silently would be a nasty surprise. Resize mirrors the arrow bindings' modifiers instead.
+- **`prefix s` normally opens tmux's session picker**, which matters more than usual here since sessions map one-to-one onto terminal windows. It moved to `prefix C-s` rather than being lost.
+
+The prefix is `Ctrl+Space` (Omarchy's choice), with `Ctrl+B` as secondary. `prefix ?` opens Omarchy's keybinding popup.
 
 ### Terminals survive Super+Z
 
