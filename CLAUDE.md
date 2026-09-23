@@ -85,9 +85,13 @@ hyprctl binds -j | jq 'map(select(.key != "")) | group_by([.modmask,.key]) | map
 `env/modules/omarchy-plugins/` (priority 35, just ahead of `symlinks`) owns everything under `~/.config/omarchy/plugins/`. Two kinds:
 
 - **Ours** — hand-written QML in `env/config/omarchy/plugins/<id>/`, symlinked into place (currently `dimitrius.iwd-network`).
-- **Third-party** — declared as `<id>|<git url>` pairs in the `OMARCHY_GIT_PLUGINS` array and installed with `omarchy plugin add`, which owns the checkout and can `omarchy plugin update` it later (currently `lgse.sandman`, `io.github.sirjul1337.lock-explorer`, `omaplug`). **Don't vendor these as submodules** — that fights the plugin CLI's own registry for no gain while we aren't patching them. Fork and swap the URL if that changes.
+- **Third-party** — declared as `<id>|<git url>` pairs in the `OMARCHY_GIT_PLUGINS` array and installed with `omarchy plugin add`, which owns the checkout and can `omarchy plugin update` it later (currently `lgse.sandman`, `io.github.sirjul1337.lock-explorer`, `omaplug`, `io.github.tallsam.navbar-cat`, `bobbynicholas.omaland`, `jankeesvw.notification-center`, `omamail`, `io.github.chris.desktop-undo`). Keep this list in step with `OMARCHY_GIT_PLUGINS`; installing by hand and not declaring it means the next `symlinks` run drops the widget from the bar and its settings from `shell.json`. **Don't vendor these as submodules** — that fights the plugin CLI's own registry for no gain while we aren't patching them. Fork and swap the URL if that changes.
 
 `omaplug` is a plugin manager widget that can enable, disable, install and remove plugins from the bar — but `plugins` and `disabledPlugins` are declared in `shell-override.json`, so **the next `symlinks` run reverts any toggle made there**. Use it to browse, try and update, then mirror anything worth keeping into `OMARCHY_GIT_PLUGINS` and the override.
+
+Window-close undo used to be a hand-rolled stash (`window-stash.sh`, soft-close into a `special:stash` workspace). It was retired for `io.github.chris.desktop-undo`, which also covers drags, float toggles, fullscreen and workspace sends. `SUPER+W` and `SUPER+SHIFT+W` are back under Omarchy's defaults. The tradeoff was accepted deliberately: the stash never killed the process so state survived, whereas plugin close-undo relaunches the command.
+
+Two plugins offer to write their own block into `~/.config/hypr/bindings.lua` — Sandman's lid action, and Desktop Undo's "Set hotkey". That path is a symlink into the repo, so such a block lands in `env/config/hypr/bindings.lua`. Sandman's is unavoidable (it is how the managed lid action works). Desktop Undo's is not: its three binds are declared in `bindings.lua` directly, so **don't use its "Set hotkey" button**.
 
 A plugin needing a root-owned helper installs it from the module via `sudo_install_exec`, never from the plugin directory itself (Sandman's `sandman-configure-hibernate` → `/usr/local/libexec/`).
 
@@ -106,6 +110,7 @@ Everything else in the live file is **destroyed** on every run. That is delibera
 Split deliberately between the Sandman plugin and `env/system/`:
 
 - **Sandman owns** lid-close action, screensaver, displays-off (DPMS), auto-lock, sleep, and hibernate-after-sleep. It takes a low-level lid-switch inhibitor instead of editing logind, writes the hibernate delay to `/etc/systemd/sleep.conf.d/90-sandman.conf`, and inserts a managed `-- BEGIN Sandman lid action override` block into `~/.config/hypr/bindings.lua` — **which is a symlink into the repo**, so that block lands in `env/config/hypr/bindings.lua` and shows up in `git diff`.
+
 - **The repo still owns** `99-power-profile.rules` (AC/battery power profile + wifi powersave), `99-low-battery.rules` (hibernate at 5%), `usb-wakeup.sh`, and `battery-notify.sh`. Sandman touches none of these.
 
 Don't reintroduce a `sleep.conf.d/hyprland.conf` or `logind.conf.d/hyprland.conf` drop-in: systemd applies drop-ins in lexicographic order and the last wins, so `hyprland.conf` sorts after `90-sandman.conf` and would silently override whatever the Sandman UI reports. `modules/system/module.sh` sweeps both paths on every run.
