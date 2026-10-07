@@ -85,7 +85,7 @@ hyprctl binds -j | jq 'map(select(.key != "")) | group_by([.modmask,.key]) | map
 `env/modules/omarchy-plugins/` (priority 35, just ahead of `symlinks`) owns everything under `~/.config/omarchy/plugins/`. Two kinds:
 
 - **Ours** — hand-written QML in `env/config/omarchy/plugins/<id>/`, symlinked into place (currently `dimitrius.iwd-network`).
-- **Third-party** — declared as `<id>|<git url>` pairs in the `OMARCHY_GIT_PLUGINS` array and installed with `omarchy plugin add`, which owns the checkout and can `omarchy plugin update` it later (currently `lgse.sandman`, `io.github.sirjul1337.lock-explorer`, `omaplug`, `io.github.tallsam.navbar-cat`, `bobbynicholas.omaland`, `jankeesvw.notification-center`, `omamail`, `io.github.chris.desktop-undo`). Keep this list in step with `OMARCHY_GIT_PLUGINS`; installing by hand and not declaring it means the next `symlinks` run drops the widget from the bar and its settings from `shell.json`. **Don't vendor these as submodules** — that fights the plugin CLI's own registry for no gain while we aren't patching them. Fork and swap the URL if that changes.
+- **Third-party** — declared as `<id>|<git url>` pairs in the `OMARCHY_GIT_PLUGINS` array and installed with `omarchy plugin add`, which owns the checkout and can `omarchy plugin update` it later (the array in `modules/omarchy-plugins/module.sh` is the source of truth — read it rather than trusting a copy here). Every third-party plugin must be declared there; installing by hand and not declaring it means the next `symlinks` run drops the widget from the bar and its settings from `shell.json`. **Don't vendor these as submodules** — that fights the plugin CLI's own registry for no gain while we aren't patching them. Fork and swap the URL if that changes.
 
 `omaplug` is a plugin manager widget that can enable, disable, install and remove plugins from the bar — but `plugins` and `disabledPlugins` are declared in `shell-override.json`, so **the next `symlinks` run reverts any toggle made there**. Use it to browse, try and update, then mirror anything worth keeping into `OMARCHY_GIT_PLUGINS` and the override.
 
@@ -146,7 +146,7 @@ Split deliberately between the Sandman plugin and `env/system/`:
 
 - **Sandman owns** lid-close action, screensaver, displays-off (DPMS), auto-lock, sleep, and hibernate-after-sleep. It takes a low-level lid-switch inhibitor instead of editing logind, writes the hibernate delay to `/etc/systemd/sleep.conf.d/90-sandman.conf`, and inserts a managed `-- BEGIN Sandman lid action override` block into `~/.config/hypr/bindings.lua` — **which is a symlink into the repo**, so that block lands in `env/config/hypr/bindings.lua` and shows up in `git diff`.
 
-- **The repo still owns** `99-power-profile.rules` (AC/battery power profile + wifi powersave), `99-low-battery.rules` (hibernate at 5%), `usb-wakeup.sh`, and `battery-notify.sh`. Sandman touches none of these.
+- **The repo still owns** `99-power-profile.rules` (AC/battery power profile + wifi powersave), `99-low-battery.rules` (hibernate at 5%), and `usb-wakeup.sh`. Sandman touches none of these. Low-battery notifications are left to Omarchy (`omarchy-battery-low`); the repo's own `battery-notify` timer was removed.
 
 Don't reintroduce a `sleep.conf.d/hyprland.conf` or `logind.conf.d/hyprland.conf` drop-in: systemd applies drop-ins in lexicographic order and the last wins, so `hyprland.conf` sorts after `90-sandman.conf` and would silently override whatever the Sandman UI reports. `modules/system/module.sh` sweeps both paths on every run.
 
@@ -154,9 +154,9 @@ Also note Sandman persists an **Off** timeout as a 7-day value in `shell.json`. 
 
 ## `env/` layout
 
-- `config/<app>/` — user app configs symlinked into `~/.config` or `~/` (fish, git, nvim, hypr, ghostty, gtk, omarchy, claude, claude-personal).
+- `config/<app>/` — user app configs symlinked into `~/.config` or `~/` (e.g. fish, hypr, tmux, ghostty, omarchy, claude, claude-personal).
 - `modules/<name>/` — installer modules (`module.sh` + `module.conf`).
-- `system/{etc,usr-lib,usr-local-bin,user}/` — managed system files, grouped so the subpath mirrors the final destination.
+- `system/{etc,usr-lib,user}/` — managed system files, grouped so the subpath mirrors the final destination.
 - `systemd/` — user systemd units. `lib/common.sh` — shared helpers. `docs/` — `layout.md`, `modules.md`, `recovery.md`.
 
 ## Claude Code config (two-account routing)
@@ -167,6 +167,14 @@ This repo manages Claude Code's own config. **Two accounts** are routed by worki
 - everywhere else → `CLAUDE_CONFIG_DIR=~/.claude-personal` (personal account).
 
 `CLAUDE.md` and custom agents are **shared** (one source in `config/claude/`, symlinked into both account dirs); only `settings.json` differs per account (`config/claude/settings.json` vs `config/claude-personal/settings.json`). The `claude` module links these; secrets and session state in `~/.claude` are intentionally left unmanaged. See `env/modules/claude/module.sh`.
+
+## Proton Drive and the Obsidian vault
+
+`env/modules/protondrive/` runs two **user** units: `protondrive-mount.service` keeps `proton:` mounted at `~/ProtonDrive` for the whole session (no idle unmount), and `protondrive-vault-sync.timer` runs `rclone bisync` between `~/Notes` (the Obsidian vault, a real local folder) and `~/ProtonDrive/Obsidian Vault` every 5 min. `OBSIDIAN_VAULT` points at `~/Notes`.
+
+- **Only the mount may log in to Proton.** The rclone protondrive backend rotates its refresh token on every renewal, so two processes on the same `~/.config/rclone/rclone.conf` log each other out. That is why the vault sync runs against the mounted path, not `proton:` — don't "optimise" it into a direct remote sync.
+- The earlier design (root fstab automount, credentials in `/etc/rclone`) is migrated away by the module on its next run; don't reintroduce either.
+- Obsidian's own `.obsidian/workspace*.json` is excluded from sync on purpose: it is per-device and rewritten constantly.
 
 ## Secrets
 
