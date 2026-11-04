@@ -168,13 +168,15 @@ This repo manages Claude Code's own config. **Two accounts** are routed by worki
 
 `CLAUDE.md` and custom agents are **shared** (one source in `config/claude/`, symlinked into both account dirs); only `settings.json` differs per account (`config/claude/settings.json` vs `config/claude-personal/settings.json`). The `claude` module links these; secrets and session state in `~/.claude` are intentionally left unmanaged. See `env/modules/claude/module.sh`.
 
-## Proton Drive and the Obsidian vault
+## The Obsidian vault (git sync)
 
-`env/modules/protondrive/` runs two **user** units: `protondrive-mount.service` keeps `proton:` mounted at `~/ProtonDrive` for the whole session (no idle unmount), and `protondrive-vault-sync.timer` runs `rclone bisync` between `~/Notes` (the Obsidian vault, a real local folder) and `~/ProtonDrive/Obsidian Vault` every 5 min. `OBSIDIAN_VAULT` points at `~/Notes`.
+`~/Notes` (the Obsidian vault, a real local folder; `OBSIDIAN_VAULT` points at it) is a git repo synced with a private GitHub repo. `env/modules/notes/` adopts or clones it and runs one **user** unit, `notes-sync.timer`, which every 5 min runs `system/user/notes-sync.sh`: commit everything, `fetch`, `rebase` onto `origin/main`, push. The bar widget (`notes-status.sh`) reads its status file.
 
-- **Only the mount may log in to Proton.** The rclone protondrive backend rotates its refresh token on every renewal, so two processes on the same `~/.config/rclone/rclone.conf` log each other out. That is why the vault sync runs against the mounted path, not `proton:` — don't "optimise" it into a direct remote sync.
-- The earlier design (root fstab automount, credentials in `/etc/rclone`) is migrated away by the module on its next run; don't reintroduce either.
-- Obsidian's own `.obsidian/workspace*.json` is excluded from sync on purpose: it is per-device and rewritten constantly.
+- **A rebase conflict aborts and notifies; it never picks a winner.** Local commits stay put and every later run reports the conflict until it is resolved by hand in `~/Notes`.
+- **Exclusions are written to `.git/info/exclude` by the script**, not a `.gitignore` in the vault — vault content stays notes only. `.obsidian/workspace*.json` is excluded on purpose: per-device and rewritten constantly.
+- **Commit identity** comes from the `includeIf "gitdir:~/Notes/"` in `config/git/gitconfig`; without it the vault would commit under the global (work) address.
+- **Claude Code's auto-memory lives in the vault**, both accounts: `~/Notes/Claude Memory/{Work,Personal}/<project>/`, where `<project>` is the project slug minus the home dir's slug. Each `~/.claude*/projects/<slug>/memory` is a symlink to its folder. `notes-sync.sh` (`link_claude_memory`) adopts new non-empty memory folders on every run and recreates the links on a fresh clone; on a merge, differing local files land beside the vault's as `<name>.<host>.md`. The obsidian agents are told to treat `Claude Memory/` as read-only. `uninstall.sh` turns the links back into real copies.
+- **Proton Drive is retired.** It used to be an rclone mount plus `rclone bisync`, until Proton began rejecting rclone's client in Oct 2026 (422, Code=2028) — rclone's Proton backend is unmaintained. The `notes` module disables and removes the old `protondrive-*` units; don't reintroduce them, and don't work around the block by spoofing `--protondrive-app-version`.
 
 ## Secrets
 
