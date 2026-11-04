@@ -164,7 +164,9 @@ Also note Sandman persists an **Off** timeout as a 7-day value in `shell.json`. 
 This repo manages Claude Code's own config. **Two accounts** are routed by working directory via `env/config/fish/functions/claude.fish`:
 
 - `~/Projects` and below → default `~/.claude` (work account).
-- everywhere else → `CLAUDE_CONFIG_DIR=~/.claude-personal` (personal account).
+- everywhere else → `CLAUDE_CONFIG_DIR=~/.claude-personal` (personal account, dimitrius.io).
+
+A second personal account (xakep.io) is opt-in, not directory-routed: `claude-xakep` (`env/config/fish/functions/claude-xakep.fish`) runs with `CLAUDE_CONFIG_DIR=~/.claude-xakep`. It gets exactly the personal config, and `notes-sync.sh` maps its memory to the same `Claude Memory/Personal/` folders, so both personal accounts share per-project memory. Anything that enumerates the account dirs (`modules/claude`, `notes-sync.sh`, `uninstall.sh`, `STALE_SCAN_ROOTS` in `lib/common.sh`) must list all three.
 
 `CLAUDE.md` and custom agents are **shared** (one source in `config/claude/`, symlinked into both account dirs); only `settings.json` differs per account (`config/claude/settings.json` vs `config/claude-personal/settings.json`). The `claude` module links these; secrets and session state in `~/.claude` are intentionally left unmanaged. See `env/modules/claude/module.sh`.
 
