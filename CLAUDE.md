@@ -68,8 +68,9 @@ Every `module.sh` starts with a `# Sourced by install.sh — do not execute dire
 
 Omarchy owns many config files (`hypr/`, `omarchy/`, `ghostty/`, GTK theme CSS) and **rewrites them on updates/theme changes**. The dotfiles therefore **extend rather than replace**:
 
-- Symlink individual files (not whole directories) into `~/.config/hypr/` so Omarchy keeps owning the directory.
+- Manage individual files (not whole directories) in `~/.config/hypr/` so Omarchy keeps owning the directory. The `.lua` files are shims rather than symlinks (see below).
 - For files Omarchy regenerates, keep our changes in a separate override file and **idempotently append an include** to Omarchy's file — `config-file = ...overrides` (ghostty) or `@import "geary-overrides.css"` (GTK) — or, where the format has no include mechanism, a `jq` merge (the quickshell bar's `omarchy/shell.json`; see the plugins section below for its precedence rules).
+- Omarchy hook directories (`~/.config/omarchy/hooks/<name>.d`) are real directories, and our hooks are linked into them one file at a time. Packages put their own hooks there too (owe's `theme-set.d/10-owe-sync`), and a symlinked directory used to drop those into the repo.
 - See `env/modules/symlinks/module.sh` for all of these; it's the reference for the extend-don't-replace approach.
 
 Omarchy's own defaults also load *before* our config, and what they cover shifts between releases — 4.0 moved app/web-app keybindings into `default/hypr/bindings/applications.lua`, so re-declaring one leaves two binds firing on the same combo. After an Omarchy upgrade, check with:
@@ -78,7 +79,13 @@ Omarchy's own defaults also load *before* our config, and what they cover shifts
 hyprctl binds -j | jq 'map(select(.key != "")) | group_by([.modmask,.key]) | map(select(length > 1))'
 ```
 
-**Danger: `omarchy-refresh-hyprland` / `omarchy-refresh-config hypr/*.lua` destroys these files.** Unlike `hyprland.conf`/`hyprland.lua` (deliberately left to Omarchy, restored via `restore_omarchy_config`), `config/hypr/{autostart,bindings,input,looknfeel,monitors}.lua` are symlinked directly into `~/.config/hypr/`. `omarchy-refresh-config` (the machinery behind the "Refresh Hyprland" menu entry) does `cp -f "$default" "$user_config_file"` — since the destination is a symlink, this writes straight through it into the repo file, silently replacing our customizations with Omarchy's stock template. It does leave a timestamped `~/.config/hypr/<file>.lua.bak.<epoch>` backup, and the repo's git history is a second line of defense, but **never run `omarchy-refresh-hyprland`** (or `omarchy-refresh-config` on any `hypr/*.lua` path) on this machine. If it happens anyway: `git -C env checkout -- config/hypr/*.lua && hyprctl reload`.
+That check, and three more, run automatically: `config/omarchy/hooks/post-update.d/dotfiles-drift` runs after every `omarchy update` and sends a notification (it never changes anything) if there are uncommitted changes under `env/config` or `env/system`, a broken hypr shim, duplicate binds, or a `shell.json` that the next `symlinks` run would rewrite (the would-be result goes to `~/.local/state/dotfiles/shell.expected.json`). Omarchy's own `ALT+TAB`/`ALT+SHIFT+TAB` pairs in its `tiling.lua` show up as duplicates; that's expected. Run it by hand with `bash ~/.config/omarchy/hooks/post-update.d/dotfiles-drift`.
+
+**`~/.config/hypr/{autostart,bindings,input,looknfeel,monitors}.lua` are shims, not symlinks.** Each one is a real, Omarchy-owned file that `dofile()`s the repo copy through the canonical link (`install_lua_shim` in `lib/common.sh`). They used to be symlinks, and every writer of those paths reached the repo through them: migrations appending to `looknfeel.lua`, plugin managed blocks, and `omarchy-refresh-config` (the machinery behind "Refresh Hyprland"), whose `cp -f` replaced the repo file with the stock template. Now all of that lands in the shim. Anything appended after the `dofile` line loads after our config, so plugin blocks still win.
+
+- **Refresh Hyprland is now recoverable.** It replaces the shim with the template, so the machine loses our config but the repo keeps it. The drift hook reports the broken shim; `./install.sh -m symlinks` writes it again. A shim that still has its `dofile` line is never touched, so plugin blocks survive installs.
+- **Known cost:** a migration that greps `~/.config/hypr/bindings.lua` for an existing bind can't see ours, so it may add a duplicate to the shim. The drift hook catches those.
+- Writing the shim drops anything else in the file. On the first conversion, managed blocks that had landed in the repo file were moved into the shims by hand.
 
 ## Omarchy shell plugins (quickshell bar)
 
@@ -120,13 +127,14 @@ Three things it depends on, none obvious:
 
 Sessions outlive their windows by design. `terminal-tmux-reap.sh` (daily, via `systemd/tmux-reap.timer`) clears detached sessions idle over 24h, matching only the `w<8 hex>` names this repo generates so hand-made sessions are never touched. They do not survive a reboot regardless — the tmux server is an ordinary user process.
 
-Several plugins write managed blocks into `config/hypr/*.lua`, and those paths are symlinks into the repo — so the block lands in `env/config/hypr/` and shows up in `git diff` as an uncommitted change nobody made by hand:
+Several plugins write fenced managed blocks into `~/.config/hypr/*.lua`. Those blocks land in the shims, so they don't show up in `git diff` and aren't versioned:
 
 - **Sandman** — a lid-action block in `bindings.lua`. Unavoidable; it is how the managed lid action works.
-- **Omaland** — a `-- >>> omaland managed block >>>` in `looknfeel.lua`, written automatically whenever its panel opens, with no opt-in.
-- **Desktop Undo** — offers one in `bindings.lua` via its "Set hotkey" button. Avoidable, and avoided: its three binds are declared in `bindings.lua` directly, so **don't use that button**.
+- **Omaland** — a `-- >>> omaland managed block >>>` in `looknfeel.lua`, written whenever its panel opens, with no opt-in. The look it last set is kept in the repo `looknfeel.lua` as plain, unfenced `hl.config`, so a fresh machine starts with it. A tweak made in the panel overrides that until it is copied back into the repo.
+- **omamail** — the Email binds block in `bindings.lua`.
+- **Desktop Undo** — offers one in `bindings.lua` via its "Set hotkey" button. Avoid it: its three binds are declared in the repo `bindings.lua` so they stay versioned, so **don't use that button**.
 
-When `git status` in `env/` shows an unexplained `hypr/*.lua` change, check for a fenced managed block before assuming it was you.
+If `git status` in `env/` still shows an unexplained `hypr/*.lua` change, check whether the file is a shim again (`head -4 ~/.config/hypr/<file>.lua`).
 
 A plugin needing a root-owned helper installs it from the module via `sudo_install_exec`, never from the plugin directory itself (Sandman's `sandman-configure-hibernate` → `/usr/local/libexec/`).
 
@@ -144,7 +152,7 @@ Everything else in the live file is **destroyed** on every run. That is delibera
 
 Split deliberately between the Sandman plugin and `env/system/`:
 
-- **Sandman owns** lid-close action, screensaver, displays-off (DPMS), auto-lock, sleep, and hibernate-after-sleep. It takes a low-level lid-switch inhibitor instead of editing logind, writes the hibernate delay to `/etc/systemd/sleep.conf.d/90-sandman.conf`, and inserts a managed `-- BEGIN Sandman lid action override` block into `~/.config/hypr/bindings.lua` — **which is a symlink into the repo**, so that block lands in `env/config/hypr/bindings.lua` and shows up in `git diff`.
+- **Sandman owns** lid-close action, screensaver, displays-off (DPMS), auto-lock, sleep, and hibernate-after-sleep. It takes a low-level lid-switch inhibitor instead of editing logind, writes the hibernate delay to `/etc/systemd/sleep.conf.d/90-sandman.conf`, and inserts a managed `-- BEGIN Sandman lid action override` block into `~/.config/hypr/bindings.lua`. That file is a shim (see above), so the block stays out of the repo.
 
 - **The repo still owns** `99-power-profile.rules` (AC/battery power profile + wifi powersave), `99-low-battery.rules` (hibernate at 5%), and `usb-wakeup.sh`. Sandman touches none of these. Low-battery notifications are left to Omarchy (`omarchy-battery-low`); the repo's own `battery-notify` timer was removed.
 
